@@ -44,7 +44,7 @@ jobs:
       - name: Check if Docker version exists
         id: version_check
         env:
-          IMAGE_NAME: ${{ env.OWNER_LC }}/comfyui
+          IMAGE_NAME: ${{ env.OWNER_LC }}/comfyui-nunchaku
           IMAGE_TAG: ${{ steps.comfyui_hash.outputs.COMFYUI_HASH }}
         run: |
           TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)
@@ -64,7 +64,7 @@ jobs:
           context: .
           push: true
           builder: ${{ env.BUILDER_NAME }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: |
-            ghcr.io/${{ env.OWNER_LC }}/comfyui:latest
-            ghcr.io/${{ env.OWNER_LC }}/comfyui:${{ steps.comfyui_hash.outputs.COMFYUI_HASH }}
+            ghcr.io/${{ env.OWNER_LC }}/comfyui-nunchaku:latest
+            ghcr.io/${{ env.OWNER_LC }}/comfyui-nunchaku:${{ steps.comfyui_hash.outputs.COMFYUI_HASH }}
