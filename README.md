@@ -34,13 +34,13 @@ docker run --gpus all -p 8188:8188 ghcr.io/notyouraverageal/comfyui:latest
 - To use a specific number of GPUs:
 
 ```bash
-docker run --gpus 2 -p 8188:8188 ghcr.io/notyouraverageal/comfyui:latest
+docker run --gpus 2 -p 8188:8188 ghcr.io/notyouraverageal/comfyui-nunchaku:latest
 ```
 
 - To use a specific GPU by its device ID (e.g., GPU 2):
 
 ```bash
-docker run --gpus device=2 -p 8188:8188 ghcr.io/notyouraverageal/comfyui:latest
+docker run --gpus device=2 -p 8188:8188 ghcr.io/notyouraverageal/comfyui-nunchaku:latest
 ```
 
 Note that you need to have the NVIDIA Container Toolkit installed on your host for GPU passthrough to work.
@@ -52,7 +52,7 @@ You can also use ComfyUI with Docker Compose. Here's an example docker-compose.y
 ```yaml
 services:
   comfyui:
-    image: ghcr.io/notyouraverageal/comfyui:latest
+    image: ghcr.io/notyouraverageal/comfyui-nunchaku:latest
     ports:
       - 8188:8188
     deploy:
