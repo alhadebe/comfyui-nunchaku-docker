@@ -38,7 +38,7 @@ WORKDIR ${APP_DIR}/ComfyUI/custom_nodes
 RUN git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Manager comfyui-manager
 
 # --- ComfyUI-nunchaku node ---
-RUN git clone --depth=1 https://github.com/mit-han-lab/ComfyUI-nunchaku
+RUN git clone --depth=1 https://github.com/nunchaku-tech/ComfyUI-nunchaku
 RUN mkdir -p ${APP_DIR}/ComfyUI/user/default/workflows \
  && cp -r ComfyUI-nunchaku/workflows/* ${APP_DIR}/ComfyUI/user/default/workflows/ || true
 
@@ -55,11 +55,10 @@ RUN if [ -n "$NUNCHAKU_WHEEL_URL" ]; then \
       cd nunchaku && git submodule update --init --recursive; \
     fi
 
-# Step 2: if source was cloned, build it with tmpfs for /tmp
+# Step 2: if source was cloned, build it
 WORKDIR ${APP_DIR}/nunchaku
 ENV NUNCHAKU_INSTALL_MODE=ALL
-RUN --mount=type=tmpfs,target=/tmp \
-    if [ -d "${APP_DIR}/nunchaku" ]; then \
+RUN if [ -d "${APP_DIR}/nunchaku" ]; then \
       PIP_NO_BUILD_ISOLATION=1 pip install -e . --prefer-binary; \
     else \
       echo "Wheel path used; skipping source build."; \
