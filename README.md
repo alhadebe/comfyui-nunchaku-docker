@@ -6,8 +6,8 @@ This repository automatically publishes Docker images for the [ComfyUI](https://
 
 Two Docker images are published to the GitHub Container Registry for each update:
 
-- `ghcr.io/notyouraverageal/comfyui:latest` - Image tagged with `latest` pointing to the most recent commit.
-- `ghcr.io/notyouraverageal/comfyui:COMMIT_HASH` - Image tagged with the specific commit hash of the ComfyUI repository.
+- `ghcr.io/notyouraverageal/comfyui-nunchaku:latest` - Image tagged with `latest` pointing to the most recent commit.
+- `ghcr.io/notyouraverageal/comfyui-nunchaku:COMMIT_HASH` - Image tagged with the specific commit hash of the ComfyUI repository.
 
 ## Usage
 
@@ -16,7 +16,7 @@ Two Docker images are published to the GitHub Container Registry for each update
 To use the most recent ComfyUI image, pull the `latest` tag:
 
 ```bash
-docker run -p 8188:8188 ghcr.io/notyouraverageal/comfyui:latest
+docker run -p 8188:8188 ghcr.io/notyouraverageal/comfyui-nunchaku:latest
 ```
 
 This will start ComfyUI and make it accessible at <http://localhost:8188>.
@@ -28,7 +28,7 @@ If you have an NVIDIA GPU and want to use it with ComfyUI, you can pass the --gp
 - To use all available GPUs:
 
 ```bash
-docker run --gpus all -p 8188:8188 ghcr.io/notyouraverageal/comfyui:latest
+docker run --gpus all -p 8188:8188 ghcr.io/notyouraverageal/comfyui-nunchaku:latest
 ```
 
 - To use a specific number of GPUs:
