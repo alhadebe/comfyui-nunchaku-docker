@@ -28,7 +28,8 @@ WORKDIR ${APP_DIR}
 RUN pip install --upgrade pip wheel setuptools \
  && pip install \
       diffusers transformers accelerate sentencepiece protobuf \
-      huggingface_hub comfy-cli simpleeval
+      huggingface_hub comfy-cli simpleeval \
+      toml opencv-python-headless
 
 # --- ComfyUI ---
 ARG COMFYUI_REF=master
