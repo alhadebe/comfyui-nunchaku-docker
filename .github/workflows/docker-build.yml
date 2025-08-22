@@ -31,24 +31,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get latest ComfyUI commit hash
-        id: comfyui_hash
-        run: |
-          COMFYUI_HASH=$(curl -s https://api.github.com/repos/comfyanonymous/ComfyUI/commits/master | jq -r '.sha[:7]')
-          echo "COMFYUI_HASH=$COMFYUI_HASH" >> $GITHUB_OUTPUT
-          
-      - name: Get latest Nunchaku wheel URL
-        id: nunchaku_wheel
-        run: |
-          url=$(curl -s https://api.github.com/repos/nunchaku-tech/nunchaku/releases/latest \
-            | jq -r '.assets[].browser_download_url' \
-            | grep -E 'torch2\.6' \
-            | grep -E 'cp311' \
-            | grep -E 'manylinux|linux' \
-            | head -n1 || true)
-          echo "NUNCHAKU_WHEEL_URL=$url" >> $GITHUB_ENV
-          echo "Wheel URL resolved to: ${url:-<none>}"
-
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -87,8 +69,9 @@ jobs:
           builder: ${{ env.BUILDER_NAME }}
           platforms: linux/amd64
           build-args: |
-            COMFYUI_REF=${{ steps.comfyui_hash.outputs.COMFYUI_HASH }}
-            NUNCHAKU_WHEEL_URL=${{ env.NUNCHAKU_WHEEL_URL }}
+            PYTAG=cp311
+            TORCH_MAJOR=2.6
+            WHEEL_PLAT=linux_x86_64
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/comfyui-nunchaku:latest
             ghcr.io/${{ env.OWNER_LC }}/comfyui-nunchaku:${{ steps.comfyui_hash.outputs.COMFYUI_HASH }}
