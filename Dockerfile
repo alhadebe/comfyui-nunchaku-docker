@@ -36,7 +36,7 @@ RUN pip install --upgrade pip wheel setuptools \
       toml opencv-python-headless \
       insightface onnxruntime-gpu \
       facexlib basicsr scikit-image \
-      peft gradio spaces timm
+      peft gradio spaces timm xformers
 
 # --- ComfyUI ---
 ARG COMFYUI_REF=master
