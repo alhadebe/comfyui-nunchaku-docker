@@ -30,7 +30,8 @@ RUN pip install --upgrade pip wheel setuptools \
       diffusers transformers accelerate sentencepiece protobuf \
       huggingface_hub comfy-cli simpleeval \
       toml opencv-python-headless \
-      insightface==0.7.3 onnxruntime-gpu==1.19.2
+      insightface==0.7.3 onnxruntime-gpu==1.19.2 \
+      facexlib==0.3.0 basicsr==1.4.2 scikit-image==0.24.0
 
 # --- ComfyUI ---
 ARG COMFYUI_REF=master
