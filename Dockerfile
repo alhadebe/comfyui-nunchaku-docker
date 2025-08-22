@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libssl-dev libffi-dev ca-certificates curl jq \
   && rm -rf /var/lib/apt/lists/*
 
+# OpenCV runtime libs (for cv2)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+ && rm -rf /var/lib/apt/lists/*
 # sanity
 RUN nvcc --version || true
 
