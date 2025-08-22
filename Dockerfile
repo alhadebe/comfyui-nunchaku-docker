@@ -41,7 +41,7 @@ RUN pip install -r requirements.txt
 # Manager & Nunchaku custom node
 WORKDIR ${APP_DIR}/ComfyUI/custom_nodes
 RUN git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Manager comfyui-manager || true
-RUN git clone --depth=1 https://github.com/mit-han-lab/ComfyUI-nunchaku || true
+RUN git clone --depth=1 https://github.com/nunchaku-tech/ComfyUI-nunchaku || true
 RUN mkdir -p ${APP_DIR}/ComfyUI/user/default/workflows \
  && if [ -d "ComfyUI-nunchaku/workflows" ]; then \
       cp -r ComfyUI-nunchaku/workflows/* ${APP_DIR}/ComfyUI/user/default/workflows/; \
