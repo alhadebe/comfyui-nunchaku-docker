@@ -44,22 +44,6 @@ jobs:
           docker buildx create --use --name mybuilder
           echo "BUILDER_NAME=mybuilder" >> $GITHUB_ENV
 
-      - name: Check if Docker version exists
-        id: version_check
-        env:
-          IMAGE_NAME: ${{ env.OWNER_LC }}/comfyui-nunchaku
-          IMAGE_TAG: ${{ steps.comfyui_hash.outputs.COMFYUI_HASH }}
-        run: |
-          TOKEN=$(echo ${{ secrets.GITHUB_TOKEN }} | base64)
-          result=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" https://ghcr.io/v2/${IMAGE_NAME}/manifests/${IMAGE_TAG})
-          if [ $result -eq 200 ]; then
-            echo "Image ${IMAGE_NAME}:${IMAGE_TAG} already exists"
-            echo "VERSION_EXISTS=true" >> $GITHUB_OUTPUT
-          else
-            echo "Image ${IMAGE_NAME}:${IMAGE_TAG} does not exist"
-            echo "VERSION_EXISTS=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Build and push Docker image
         if: steps.version_check.outputs.VERSION_EXISTS == 'false'
         uses: docker/build-push-action@v5.3.0
