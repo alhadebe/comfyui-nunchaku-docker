@@ -48,14 +48,15 @@ RUN mkdir -p ${APP_DIR}/ComfyUI/user/default/workflows \
     fi
 
 # --- Nunchaku from GitHub RELEASE wheel (required) ---
-WORKDIR ${APP_DIR}
-# Fail clearly if not provided
-RUN test -n "$NUNCHAKU_WHEEL_URL" || (echo "NUNCHAKU_WHEEL_URL is required. Pass it via --build-arg." && exit 1)
-# Download + install
-RUN echo "Installing Nunchaku wheel from: $NUNCHAKU_WHEEL_URL" \
- && curl -fL "$NUNCHAKU_WHEEL_URL" -o /tmp/nunchaku.whl \
- && ls -lh /tmp/nunchaku.whl \
- && pip install /tmp/nunchaku.whl
+WORKDIR /tmp
+RUN test -n "$NUNCHAKU_WHEEL_URL" || (echo "NUNCHAKU_WHEEL_URL is required. Pass it via --build-arg." && exit 1) \
+ && echo "Installing Nunchaku wheel from: $NUNCHAKU_WHEEL_URL" \
+ && curl -fLO "$NUNCHAKU_WHEEL_URL" \
+ && ls -lh *.whl \
+ && pip install --no-cache-dir ./*.whl
+
+# back to app dir
+WORKDIR ${APP_DIR}/ComfyUI
 
 # --- Non-root user (optional) ---
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser ${APP_DIR} /models
