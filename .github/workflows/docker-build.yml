@@ -41,6 +41,25 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Get latest Nunchaku wheel URL (release)
+        id: nunchaku_wheel
+        run: |
+          set -euo pipefail
+          url=$(curl -s https://api.github.com/repos/nunchaku-tech/nunchaku/releases/latest \
+            | jq -r '.assets[].browser_download_url' \
+            | grep -E 'torch2\.6' \
+            | grep -E 'cp311' \
+            | grep -E 'manylinux|linux' \
+            | head -n1 || true)
+
+          if [ -z "${url}" ] || [ "${url}" = "null" ]; then
+            echo "Failed to resolve a release wheel for torch2.6/cp311."
+            exit 1
+          fi
+
+          echo "Resolved Nunchaku wheel: $url"
+          echo "NUNCHAKU_WHEEL_URL=$url" >> $GITHUB_ENV
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5.3.0
         with:
@@ -48,8 +67,6 @@ jobs:
           push: true
           platforms: linux/amd64
           build-args: |
-            PYTAG=cp311
-            TORCH_MAJOR=2.6
-            WHEEL_PLAT=linux_x86_64
+            NUNCHAKU_WHEEL_URL=${{ env.NUNCHAKU_WHEEL_URL }}
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/comfyui-nunchaku:latest
