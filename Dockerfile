@@ -1,122 +1,98 @@
 # syntax=docker/dockerfile:1.7
 
 ############################
-# 1) BUILDER (has compilers)
+# 1) BUILDER STAGE
 ############################
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-devel AS builder
+# Pin to a specific, recent version of PyTorch with CUDA 12.1 and Python 3.11
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn8-devel AS builder
 
+# Set environment variables for non-interactive installation
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
-    CUDA_HOME=/usr/local/cuda \
-    PATH=/usr/local/cuda/bin:$PATH \
-    LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH \
-    PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+    PATH=/opt/venv/bin:$PATH \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-ARG APP_DIR=/opt/app
-ARG NUNCHAKU_WHEEL_URL
+# ARG for ComfyUI version, defaults to master
 ARG COMFYUI_REF=master
+ARG APP_DIR=/opt/app
 
-# System deps only in builder
+# Install build-time system dependencies
 RUN --mount=type=cache,id=apt-builder,target=/var/cache/apt \
     apt-get update && apt-get install -y --no-install-recommends \
-      git build-essential pkg-config cmake ninja-build \
-      libssl-dev libffi-dev ca-certificates curl jq \
+      git \
+      build-essential \
+      cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Create venv so we can copy just it later
-RUN python -m venv /opt/venv
-ENV PATH=/opt/venv/bin:$PATH
+# Create a virtual environment
+RUN python3 -m venv /opt/venv
 
-# Minimal pip bootstrap
-RUN python -m pip install --upgrade pip wheel setuptools
-
-# --- Python deps (Torch already in base image) ---
-# NOTE: opencv-python-headless avoids GUI/X dependencies
+# --- Install Python Dependencies ---
+# Install ComfyUI's core requirements first
+# Note: torch is already in the base image
 RUN --mount=type=cache,id=pip-cache,target=/root/.cache/pip \
     pip install \
-      diffusers transformers accelerate sentencepiece protobuf \
-      huggingface_hub comfy-cli simpleeval \
-      toml opencv-python-headless \
-      insightface onnxruntime-gpu \
-      facexlib basicsr scikit-image \
-      peft gradio spaces timm xformers lark
+      torchvision \
+      torchaudio
 
-# --- ComfyUI (source only in builder; we’ll copy to final) ---
-RUN mkdir -p ${APP_DIR}
+# --- Clone ComfyUI and Custom Nodes ---
 WORKDIR ${APP_DIR}
-RUN git clone --depth=1 https://github.com/comfyanonymous/ComfyUI ${APP_DIR}/ComfyUI || \
-    (git clone https://github.com/comfyanonymous/ComfyUI ${APP_DIR}/ComfyUI)
-
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git
 WORKDIR ${APP_DIR}/ComfyUI
-RUN git fetch --all --tags || true && git checkout ${COMFYUI_REF} || true
+# Check out a specific version if needed for reproducibility
+RUN git checkout ${COMFYUI_REF}
 
-# Install ComfyUI requirements into the venv
+# Install ComfyUI's python requirements
 RUN --mount=type=cache,id=pip-cache,target=/root/.cache/pip \
     pip install -r requirements.txt
 
-# Custom nodes
+# Clone custom nodes
 WORKDIR ${APP_DIR}/ComfyUI/custom_nodes
-RUN git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Manager comfyui-manager || true
-RUN git clone --depth=1 https://github.com/nunchaku-tech/ComfyUI-nunchaku || true
+RUN git clone https://github.com/ltdrdata/ComfyUI-Manager.git
+RUN git clone https://github.com/nunchaku-tech/ComfyUI-nunchaku.git
 
-# Copy example workflows (optional)
-RUN mkdir -p ${APP_DIR}/ComfyUI/user/default/workflows \
- && if [ -d "ComfyUI-nunchaku/workflows" ]; then \
-      cp -r ComfyUI-nunchaku/workflows/* ${APP_DIR}/ComfyUI/user/default/workflows/; \
-    fi
+# Install requirements for custom nodes
+RUN --mount=type=cache,id=pip-cache,target=/root/.cache/pip \
+    pip install -r ComfyUI-nunchaku/requirements.txt
 
-# --- Install Nunchaku wheel (required) ---
-WORKDIR /tmp
-RUN test -n "$NUNCHAKU_WHEEL_URL" || (echo "NUNCHAKU_WHEEL_URL is required. Pass it via --build-arg." && exit 1)
-RUN curl -fLO "$NUNCHAKU_WHEEL_URL" \
- && ls -lh *.whl \
- && pip install --no-cache-dir ./*.whl
-
-# (Optional) strip caches from venv to shrink copy
-RUN find /opt/venv -type d -name '__pycache__' -prune -exec rm -rf {} + || true
+# Clean up caches in the venv to reduce size
+RUN find /opt/venv -type d -name '__pycache__' -prune -exec rm -rf {} +
 
 
-################################
-# 2) FINAL RUNTIME (no compilers)
-################################
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+############################
+# 2) FINAL RUNTIME STAGE
+############################
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn8-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
-    CUDA_HOME=/usr/local/cuda \
-    PATH=/usr/local/cuda/bin:/opt/venv/bin:$PATH \
-    LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH \
-    PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+    PATH=/opt/venv/bin:$PATH \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 ARG APP_DIR=/opt/app
 
-# Runtime-only system libs.
-# If you don’t need OpenGL/X11 at runtime, keep this minimal.
-# (opencv-python-headless does NOT require libgl1)
+# Install runtime-only system dependencies like 'tini'
 RUN --mount=type=cache,id=apt-final,target=/var/cache/apt \
     apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates tini \
+      tini \
     && rm -rf /var/lib/apt/lists/*
 
-# App dirs
-RUN mkdir -p ${APP_DIR} /models
-
-# Copy only what we need from the builder
-#  - Python venv with all packages
-#  - ComfyUI sources + custom nodes + workflows
+# Copy the Python environment and application code from the builder stage
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder ${APP_DIR}/ComfyUI ${APP_DIR}/ComfyUI
 
-# Non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser ${APP_DIR} /models
-USER appuser
+# Create a non-root user and set up permissions
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /models && \
+    chown -R appuser:appuser ${APP_DIR} /models
 
+USER appuser
 WORKDIR ${APP_DIR}/ComfyUI
 
 EXPOSE 8188
-ENV NVIDIA_VISIBLE_DEVICES=all \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    COMFYUI_MODELS_DIR=/models
 
-ENTRYPOINT ["/usr/bin/tini","--"]
-CMD ["python","main.py","--listen","--port","8188"]
+# Use tini as the entrypoint to properly manage the application process
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["python3", "main.py", "--listen", "0.0.0.0", "--port", "8188"]
