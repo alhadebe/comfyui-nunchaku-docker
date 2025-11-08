@@ -3,8 +3,9 @@
 ############################
 # 1) BUILDER STAGE
 ############################
-# Pin to a specific, recent version of PyTorch with CUDA 12.1 and Python 3.11
-FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn8-devel AS builder
+# *** CHANGED LINE ***
+# Use a valid and existing PyTorch image tag from Docker Hub
+FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel AS builder
 
 # Set environment variables for non-interactive installation
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -63,7 +64,9 @@ RUN find /opt/venv -type d -name '__pycache__' -prune -exec rm -rf {} +
 ############################
 # 2) FINAL RUNTIME STAGE
 ############################
-FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn8-runtime
+# *** CHANGED LINE ***
+# Use the matching 'runtime' version of the valid image tag
+FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
