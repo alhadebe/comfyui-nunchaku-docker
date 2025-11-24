@@ -19,7 +19,6 @@ jobs:
       packages: write
 
     steps:
-      # --- CORRECTED ACTION NAME BELOW ---
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
@@ -39,74 +38,48 @@ jobs:
           sudo apt-get -qq update
           sudo apt-get -qq install -y skopeo jq
 
-      # -----------------------------------------------------------------------
-      # 1. Fetch Remote SHAs
-      # -----------------------------------------------------------------------
       - name: Get Remote SHAs
         id: remote
         run: |
           COMFY_SHA=$(git ls-remote https://github.com/comfyanonymous/ComfyUI.git refs/heads/${{ env.COMFY_BRANCH }} | cut -f1)
           NUN_SHA=$(git ls-remote https://github.com/nunchaku-tech/nunchaku.git refs/heads/${{ env.NUNCHAKU_BRANCH }} | cut -f1)
-          
-          echo "Remote ComfyUI: $COMFY_SHA"
-          echo "Remote Nunchaku: $NUN_SHA"
-          
           echo "comfy_sha=$COMFY_SHA" >> "$GITHUB_OUTPUT"
           echo "nunchaku_sha=$NUN_SHA" >> "$GITHUB_OUTPUT"
 
-      # -----------------------------------------------------------------------
-      # 2. Fetch Registry SHAs
-      # -----------------------------------------------------------------------
       - name: Get Current Registry Labels
         id: current
         continue-on-error: true
         run: |
           FULL_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          
           if skopeo inspect docker://"$FULL_IMAGE" > /dev/null 2>&1; then
             JSON=$(skopeo inspect docker://"$FULL_IMAGE")
             OLD_COMFY=$(echo "$JSON" | jq -r '.Labels["comfyui.sha"] // empty')
             OLD_NUN=$(echo "$JSON" | jq -r '.Labels["nunchaku.sha"] // empty')
           else
-            echo "Image does not exist yet."
             OLD_COMFY=""
             OLD_NUN=""
           fi
-          
-          echo "Registry ComfyUI: $OLD_COMFY"
-          echo "Registry Nunchaku: $OLD_NUN"
-          
           echo "comfy_sha=$OLD_COMFY" >> "$GITHUB_OUTPUT"
           echo "nunchaku_sha=$OLD_NUN" >> "$GITHUB_OUTPUT"
 
-      # -----------------------------------------------------------------------
-      # 3. Compare
-      # -----------------------------------------------------------------------
       - name: Check for Changes
         id: check
         run: |
           SHOULD_BUILD="false"
-          
           if [ "${{ steps.remote.outputs.comfy_sha }}" != "${{ steps.current.outputs.comfy_sha }}" ]; then
             echo "::notice::ComfyUI has updated."
             SHOULD_BUILD="true"
           fi
-          
           if [ "${{ steps.remote.outputs.nunchaku_sha }}" != "${{ steps.current.outputs.nunchaku_sha }}" ]; then
              echo "::notice::Nunchaku has updated."
              SHOULD_BUILD="true"
           fi
-          
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "::notice::Manual trigger detected."
             SHOULD_BUILD="true"
           fi
-          
           echo "build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
 
-      # -----------------------------------------------------------------------
-      # 4. Build and Push
-      # -----------------------------------------------------------------------
       - name: Log in to the Container registry
         if: steps.check.outputs.build == 'true'
         uses: docker/login-action@v3
@@ -127,7 +100,6 @@ jobs:
           file: Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          # Use inline caching to speed up xFormers/FlashAttn stages on subsequent runs
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-to: type=inline
           build-args: |
