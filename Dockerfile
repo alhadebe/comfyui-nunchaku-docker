@@ -1,24 +1,27 @@
 # syntax=docker/dockerfile:1
 
 # ==============================================================================
-# GLOBAL ARGS & BASE
+# GLOBAL ARGS
 # ==============================================================================
 ARG CUDA_VER=12.9.1
 ARG UBUNTU_VER=24.04
 ARG TORCH_VERSION=2.8.0
 ARG PY_VER=3.12
 
-# Base builder image with common tools
+# ==============================================================================
+# BASE BUILDER
+# ==============================================================================
 FROM nvidia/cuda:${CUDA_VER}-devel-ubuntu${UBUNTU_VER} AS base_builder
 ARG PY_VER
 ARG TORCH_VERSION
 
+# Install minimal build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python${PY_VER} python${PY_VER}-dev git build-essential \
     && ln -s /usr/bin/python${PY_VER} /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
+# Install uv (fast python package manager)
 ADD https://github.com/astral-sh/uv/releases/download/0.8.6/uv-x86_64-unknown-linux-gnu.tar.gz /tmp/uv.tar.gz
 RUN tar -xzf /tmp/uv.tar.gz --strip-components=1 && mv uv /usr/local/bin/uv
 
@@ -27,24 +30,25 @@ RUN uv venv venv
 ENV VIRTUAL_ENV=/build/venv
 ENV PATH="/build/venv/bin:$PATH"
 
-# Install PyTorch & Build Deps
+# Install PyTorch & Build Dependencies
+# Note: cu126 works for 12.x builds generally
 RUN uv pip install torch==${TORCH_VERSION} --extra-index-url https://download.pytorch.org/whl/cu126 \
     ninja wheel packaging setuptools
 
 # ==============================================================================
-# STAGE: Build xFormers (Pinned Version)
+# STAGE: xFormers (Pinned)
 # ==============================================================================
 FROM base_builder AS builder_xformers
 ARG XFORMERS_VER=v0.0.32.post2
 
-# Architectures: 8.0(A100), 8.6(3090/4090), 8.9(Ada), 9.0(Hopper)
+# Target Architectures: A100(8.0), 3090/4090(8.6), Ada(8.9), Hopper(9.0)
 ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9+PTX 12.0"
 RUN git clone --depth 1 --branch ${XFORMERS_VER} --recurse-submodules https://github.com/facebookresearch/xformers.git xformers && \
     cd xformers && \
     uv build --wheel
 
 # ==============================================================================
-# STAGE: Build FlashAttention-2 (Pinned Version)
+# STAGE: FlashAttention-2 (Pinned)
 # ==============================================================================
 FROM base_builder AS builder_flashattn
 ARG FLASH_VER=v2.8.3
@@ -55,7 +59,7 @@ RUN git clone --depth 1 --branch ${FLASH_VER} --recurse-submodules https://githu
     uv build --wheel --no-build-isolation
 
 # ==============================================================================
-# STAGE: Build SageAttention (Pinned Version)
+# STAGE: SageAttention (Pinned)
 # ==============================================================================
 FROM base_builder AS builder_sage
 ARG SAGE_VER=v2.2.0-windows.post2
@@ -67,10 +71,9 @@ RUN git clone --depth 1 --branch ${SAGE_VER} --recurse-submodules https://github
     uv build --wheel
 
 # ==============================================================================
-# STAGE: Build Nunchaku (Dynamic - Tracks Repo)
+# STAGE: Nunchaku (Dynamic - Tracks Repo)
 # ==============================================================================
 FROM base_builder AS builder_nunchaku
-# This ARG comes from the GitHub Workflow
 ARG NUNCHAKU_REF=main
 
 RUN git clone --recursive https://github.com/nunchaku-tech/nunchaku.git && \
@@ -83,13 +86,13 @@ RUN git clone --recursive https://github.com/nunchaku-tech/nunchaku.git && \
     uv build --wheel
 
 # ==============================================================================
-# STAGE: Final Runtime (ComfyUI + Extensions)
+# STAGE: Final Runtime Image
 # ==============================================================================
 FROM nvidia/cuda:${CUDA_VER}-runtime-ubuntu${UBUNTU_VER}
 ARG PY_VER
 ARG TORCH_VERSION
 
-# Runtime System Deps
+# Runtime System Dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python${PY_VER} python${PY_VER}-dev libgl1 libglib2.0-0 libgthread-2.0-0 libgtk-3-0 git curl \
     && ln -s /usr/bin/python${PY_VER} /usr/bin/python \
@@ -109,19 +112,18 @@ ENV PATH="/comfyui/venv/bin:$PATH"
 # 1. Install PyTorch
 RUN uv pip install torch==${TORCH_VERSION} torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu126
 
-# 2. Install Common Comfy Deps
+# 2. Install Common Comfy Dependencies
 RUN uv pip install \
     einops tokenizers pyyaml pillow scipy tqdm psutil kornia spandrel soundfile \
     huggingface_hub[cli] huggingface_hub[hf_transfer] \
     diffusers transformers accelerate sentencepiece protobuf torchsde
 
-# 3. Gather and Install Custom Wheels (xFormers, FlashAttn, Sage, Nunchaku)
+# 3. Install Custom Compiled Wheels
 COPY --from=builder_xformers /build/xformers/dist /tmp/wheels
 COPY --from=builder_flashattn /build/flash-attention/dist /tmp/wheels
 COPY --from=builder_sage     /build/SageAttention/dist /tmp/wheels
 COPY --from=builder_nunchaku /build/nunchaku/dist /tmp/wheels
 
-# Install all wheels found in /tmp/wheels
 RUN uv pip install /tmp/wheels/*.whl && rm -rf /tmp/wheels
 
 # 4. Install ComfyUI (Dynamic)
@@ -131,25 +133,26 @@ RUN git clone --depth 1 --branch ${COMFYUI_REF} https://github.com/comfyanonymou
     git remote add origin https://github.com/comfyanonymous/ComfyUI && \
     uv pip install -r requirements.txt
 
-# 5. Install ComfyUI Manager (Extensions)
+# 5. Install ComfyUI Manager
 ENV COMFYUI_PATH=/comfyui
 RUN git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager /comfyui-manager && \
     uv pip install -r /comfyui-manager/requirements.txt && \
+    # Pre-cache Manager database
     python /comfyui-manager/cm-cli.py update all && \
     mv /comfyui/user/default/ComfyUI-Manager/cache /comfyui-manager-cache
 
-# 6. Entrypoint (Simulates entrypoint.extensions.sh)
+# 6. Setup Entrypoint
 COPY <<EOF /entrypoint.sh
 #!/bin/bash
 set -e
 
-# Setup Extensions/Manager links
+# Link ComfyUI Manager
 mkdir -p /comfyui/custom_nodes
 ln -sf /comfyui-manager /comfyui/custom_nodes/ComfyUI-Manager
 mkdir -p /comfyui/user/default/ComfyUI-Manager
 ln -sf /comfyui-manager-cache /comfyui/user/default/ComfyUI-Manager/cache
 
-# Generate Config
+# Create Manager Config if missing
 python - <<'PYCFG'
 import configparser, pathlib
 cfg_path = pathlib.Path('/comfyui/user/default/ComfyUI-Manager/config.ini')
@@ -166,9 +169,10 @@ else:
         cfg.write(f)
 PYCFG
 
+# Ensure dependencies
 python /comfyui-manager/cm-cli.py fix all
 
-# Env flags needed for custom kernels
+# Flag for xformers to work with mismatched flash-attn versions if necessary
 export XFORMERS_IGNORE_FLASH_VERSION_CHECK=1
 
 echo "Starting ComfyUI..."
