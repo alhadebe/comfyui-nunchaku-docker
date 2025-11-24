@@ -1,0 +1,80 @@
+name: Check for Upstream Updates
+
+on:
+  schedule:
+    # Run every hour
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.compare.outputs.should_build }}
+      comfyui_latest: ${{ steps.fetch.outputs.comfyui }}
+      nunchaku_latest: ${{ steps.fetch.outputs.nunchaku }}
+    steps:
+      - name: Fetch Upstream Versions
+        id: fetch
+        run: |
+          # 1. Get latest ComfyUI Release Tag
+          # Use "latest" release endpoint. If you prefer master branch, change to commits/master
+          COMFY_TAG=$(curl -s https://api.github.com/repos/comfyanonymous/ComfyUI/releases/latest | jq -r .tag_name)
+          
+          # 2. Get latest Nunchaku Release Tag
+          NUN_TAG=$(curl -s https://api.github.com/repos/nunchaku-tech/nunchaku/releases/latest | jq -r .tag_name)
+          
+          echo "Latest ComfyUI: $COMFY_TAG"
+          echo "Latest Nunchaku: $NUN_TAG"
+          
+          echo "comfyui=$COMFY_TAG" >> $GITHUB_OUTPUT
+          echo "nunchaku=$NUN_TAG" >> $GITHUB_OUTPUT
+
+      - name: Check Current Image Labels
+        id: current
+        env:
+          REGISTRY: ghcr.io
+          IMAGE_NAME: ${{ github.repository }}
+        run: |
+          # Install skopeo to inspect remote image without downloading
+          sudo apt-get -y install skopeo jq
+          
+          FULL_IMAGE="$REGISTRY/$IMAGE_NAME:latest"
+          
+          # Inspect the labels of the 'latest' image in GHCR
+          # We use || true to handle the case where the image doesn't exist yet (first run)
+          INSPECT_JSON=$(skopeo inspect docker://$FULL_IMAGE 2>/dev/null || echo "{}")
+          
+          OLD_COMFY=$(echo $INSPECT_JSON | jq -r '.Labels["com.custom.version.comfyui"] // "none"')
+          OLD_NUN=$(echo $INSPECT_JSON | jq -r '.Labels["com.custom.version.nunchaku"] // "none"')
+          
+          echo "Current Image ComfyUI: $OLD_COMFY"
+          echo "Current Image Nunchaku: $OLD_NUN"
+          
+          echo "old_comfyui=$OLD_COMFY" >> $GITHUB_OUTPUT
+          echo "old_nunchaku=$OLD_NUN" >> $GITHUB_OUTPUT
+
+      - name: Compare Versions
+        id: compare
+        run: |
+          NEW_C="${{ steps.fetch.outputs.comfyui }}"
+          NEW_N="${{ steps.fetch.outputs.nunchaku }}"
+          OLD_C="${{ steps.current.outputs.old_comfyui }}"
+          OLD_N="${{ steps.current.outputs.old_nunchaku }}"
+          
+          if [ "$NEW_C" != "$OLD_C" ] || [ "$NEW_N" != "$OLD_N" ]; then
+            echo "Updates detected! Triggering build."
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "Versions match. No build needed."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+
+  trigger-build:
+    needs: check-versions
+    if: needs.check-versions.outputs.should_build == 'true'
+    uses: ./.github/workflows/build-publish.yml
+    with:
+      comfyui_version: ${{ needs.check-versions.outputs.comfyui_latest }}
+      nunchaku_version: ${{ needs.check-versions.outputs.nunchaku_latest }}
+    secrets: inherit
