@@ -2,7 +2,6 @@ name: Check for Upstream Updates
 
 on:
   schedule:
-    # Run every hour
     - cron: "0 * * * *"
   workflow_dispatch:
 
@@ -16,14 +15,26 @@ jobs:
     steps:
       - name: Fetch Upstream Versions
         id: fetch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 1. Get latest ComfyUI Release Tag
-          # Use "latest" release endpoint. If you prefer master branch, change to commits/master
-          COMFY_TAG=$(curl -s https://api.github.com/repos/comfyanonymous/ComfyUI/releases/latest | jq -r .tag_name)
+          # 1. Get latest ComfyUI Release (using GitHub CLI for better reliability)
+          # Note: ComfyUI uses tags like v0.2.4. Change to "main" if you prefer rolling release.
+          COMFY_TAG=$(gh api repos/comfyanonymous/ComfyUI/releases/latest --jq .tag_name)
           
-          # 2. Get latest Nunchaku Release Tag
-          NUN_TAG=$(curl -s https://api.github.com/repos/nunchaku-tech/nunchaku/releases/latest | jq -r .tag_name)
+          # 2. Get latest Nunchaku Release
+          NUN_TAG=$(gh api repos/nunchaku-tech/nunchaku/releases/latest --jq .tag_name)
           
+          # 3. Safety Check - ensure we didn't get empty/null values
+          if [ -z "$COMFY_TAG" ] || [ "$COMFY_TAG" == "null" ]; then
+            echo "Error: Failed to fetch ComfyUI version"
+            exit 1
+          fi
+          if [ -z "$NUN_TAG" ] || [ "$NUN_TAG" == "null" ]; then
+            echo "Error: Failed to fetch Nunchaku version"
+            exit 1
+          fi
+
           echo "Latest ComfyUI: $COMFY_TAG"
           echo "Latest Nunchaku: $NUN_TAG"
           
@@ -36,13 +47,11 @@ jobs:
           REGISTRY: ghcr.io
           IMAGE_NAME: ${{ github.repository }}
         run: |
-          # Install skopeo to inspect remote image without downloading
           sudo apt-get -y install skopeo jq
           
           FULL_IMAGE="$REGISTRY/$IMAGE_NAME:latest"
           
-          # Inspect the labels of the 'latest' image in GHCR
-          # We use || true to handle the case where the image doesn't exist yet (first run)
+          # Inspect labels, defaulting to "none" if image doesn't exist
           INSPECT_JSON=$(skopeo inspect docker://$FULL_IMAGE 2>/dev/null || echo "{}")
           
           OLD_COMFY=$(echo $INSPECT_JSON | jq -r '.Labels["com.custom.version.comfyui"] // "none"')
