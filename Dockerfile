@@ -3,7 +3,7 @@
 # ==============================================================================
 FROM nvidia/cuda:12.6.1-devel-ubuntu24.04 AS builder
 
-ARG NUNCHAKU_VERSION=v0.3.2
+ARG NUNCHAKU_VERSION=v1.0.2
 
 ENV DEBIAN_FRONTEND=noninteractive
 # Set these persistently so they are available to all RUN commands
@@ -35,6 +35,9 @@ RUN git clone https://github.com/woct0rdho/SageAttention.git && \
     uv pip install --no-build-isolation . 
 
 # 4. Compile Nunchaku
+# We force the clone to fail if the version arg is empty
+RUN if [ -z "${NUNCHAKU_VERSION}" ] || [ "${NUNCHAKU_VERSION}" = "null" ]; then echo "Error: NUNCHAKU_VERSION is not set correctly" && exit 1; fi
+
 # Use --no-build-isolation to prevent uv from downloading a CPU-only Torch
 RUN git clone --recursive --branch ${NUNCHAKU_VERSION} https://github.com/nunchaku-tech/nunchaku.git && \
     cd nunchaku && \
@@ -46,9 +49,9 @@ RUN git clone --recursive --branch ${NUNCHAKU_VERSION} https://github.com/nuncha
 FROM nvidia/cuda:12.6.1-runtime-ubuntu24.04
 
 ARG COMFYUI_VERSION=master
-ARG NUNCHAKU_VERSION=v0.3.2
+ARG NUNCHAKU_VERSION=v1.0.2
 
-LABEL org.opencontainers.image.source=https://github.com/alhadebe/comfyui-nunchaku-docker
+LABEL org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}
 LABEL com.custom.version.comfyui=${COMFYUI_VERSION}
 LABEL com.custom.version.nunchaku=${NUNCHAKU_VERSION}
 
