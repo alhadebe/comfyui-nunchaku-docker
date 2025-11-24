@@ -6,6 +6,9 @@ FROM nvidia/cuda:12.6.1-devel-ubuntu24.04 AS builder
 ARG NUNCHAKU_VERSION=v0.3.2
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_HOME="/usr/local/cuda"
+ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9 9.0"
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.12 python3.12-dev python3-pip git build-essential ninja-build \
     && ln -s /usr/bin/python3.12 /usr/bin/python \
@@ -18,21 +21,24 @@ WORKDIR /build
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install PyTorch & dependencies (Cached)
-# Using --no-cache-dir to save space in the final image layer if uv keeps it
+# 1. Install PyTorch
+# We use --no-cache to keep image size down in case uv tries to cache wheels
 RUN uv pip install --no-cache torch==2.5.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-RUN uv pip install --no-cache setuptools wheel packaging ninja
 
-# Compile SageAttention
-ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9 9.0"
+# 2. Install Build Dependencies explicitly (Numpy is required for build scripts)
+RUN uv pip install --no-cache numpy setuptools wheel packaging ninja
+
+# 3. Compile SageAttention
 RUN git clone https://github.com/woct0rdho/SageAttention.git && \
     cd SageAttention && \
     uv pip install . 
 
-# Compile Nunchaku
+# 4. Compile Nunchaku
+# We explicitly export the ARCH list here to ensure setup.py sees it
 RUN git clone --recursive --branch ${NUNCHAKU_VERSION} https://github.com/nunchaku-tech/nunchaku.git && \
     cd nunchaku && \
-    uv pip install .
+    export TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9 9.0" && \
+    uv pip install -v .
 
 # ==============================================================================
 # STAGE 2: RUNTIME
@@ -57,14 +63,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 WORKDIR /app
 
-# COPY THE VIRTUAL ENV FROM BUILDER (Contains Torch, Nunchaku, SageAttention)
+# Copy the populated venv from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install ComfyUI
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
     git checkout ${COMFYUI_VERSION} && \
-    # Install requirements but skip torch (already in venv) to save bandwidth/time
     uv pip install --no-cache -r requirements.txt
 
 WORKDIR /app/custom_nodes
