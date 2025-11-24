@@ -32,6 +32,21 @@ jobs:
       packages: write
 
     steps:
+      # ----------------------------------------------------------------
+      # NEW STEP: CLEAN UP DISK SPACE
+      # ----------------------------------------------------------------
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # This action removes unused software to free ~20GB
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -64,5 +79,7 @@ jobs:
           build-args: |
             COMFYUI_VERSION=${{ inputs.comfyui_version }}
             NUNCHAKU_VERSION=${{ inputs.nunchaku_version }}
+          # Using gha cache is good, but large. If space fails again, 
+          # try commenting out the next two lines (cache-from/to)
           cache-from: type=gha
           cache-to: type=gha,mode=max
